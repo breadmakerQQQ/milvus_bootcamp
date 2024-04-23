@@ -1,3 +1,5 @@
+import sys
+
 import uvicorn
 import os
 from diskcache import Cache
@@ -14,6 +16,7 @@ from operations.upload import do_upload
 from operations.search import do_search
 from operations.count import do_count
 from operations.drop import do_drop
+from operations.delete import do_delete
 from logs import LOGGER
 from pydantic import BaseModel
 from typing import Optional
@@ -38,6 +41,7 @@ if not os.path.exists(UPLOAD_PATH):
     os.makedirs(UPLOAD_PATH)
     LOGGER.info(f"mkdir the path:{UPLOAD_PATH}")
 
+
 @app.get('/data')
 def get_img(image_path):
     # Get the image file
@@ -59,9 +63,11 @@ def get_progress():
         LOGGER.error(f"upload image error: {e}")
         return {'status': False, 'msg': e}, 400
 
+
 class Item(BaseModel):
     Table: Optional[str] = None
     File: str
+
 
 @app.post('/img/load')
 async def load_images(item: Item):
@@ -73,6 +79,7 @@ async def load_images(item: Item):
     except Exception as e:
         LOGGER.error(e)
         return {'status': False, 'msg': e}, 400
+
 
 @app.post('/img/upload')
 async def upload_images(image: UploadFile = File(None), url: str = None, table_name: str = None):
@@ -91,10 +98,11 @@ async def upload_images(image: UploadFile = File(None), url: str = None, table_n
             return {'status': False, 'msg': 'Image and url are required'}, 400
         vector_id = do_upload(table_name, img_path, MODEL, MILVUS_CLI, MYSQL_CLI)
         LOGGER.info(f"Successfully uploaded data, vector id: {vector_id}")
-        return "Successfully loaded data: " + str(vector_id)
+        return {'vector_id': str(vector_id)}
     except Exception as e:
         LOGGER.error(e)
         return {'status': False, 'msg': e}, 400
+
 
 @app.post('/img/search')
 async def search_images(image: UploadFile = File(...), topk: int = Form(TOP_K), table_name: str = None):
@@ -105,14 +113,31 @@ async def search_images(image: UploadFile = File(...), topk: int = Form(TOP_K), 
         img_path = os.path.join(UPLOAD_PATH, image.filename)
         with open(img_path, "wb+") as f:
             f.write(content)
-        paths, distances = do_search(table_name, img_path, topk, MODEL, MILVUS_CLI, MYSQL_CLI)
-        res = dict(zip(paths, distances))
-        res = sorted(res.items(), key=lambda item: item[1])
+        paths, distances, vids = do_search(table_name, img_path, topk, MODEL, MILVUS_CLI, MYSQL_CLI)
+        res = list(zip(paths, distances, vids))
+        res = sorted(res, key=lambda item: item[1])
         LOGGER.info("Successfully searched similar images!")
         return res
     except Exception as e:
         LOGGER.error(e)
         return {'status': False, 'msg': e}, 400
+
+
+@app.post('/img/delete')
+async def delete_image(table_name: str = None, vector_id: str = None):
+    if vector_id is None:
+        return {'status': False, 'msg': 'vector_id is required'}, 400
+    if table_name is None:
+        return {'status': False, 'msg': 'table_name is required'}, 400
+
+    # Delete a image in Milvus/MySQL
+    try:
+        status = do_delete(table_name, vector_id, MILVUS_CLI, MYSQL_CLI)
+        LOGGER.info("Successfully deleted image!")
+        return status
+    except Exception as e:
+        LOGGER.error(e)
+        return  {'status': False, 'msg': e}, 400
 
 
 @app.post('/img/count')

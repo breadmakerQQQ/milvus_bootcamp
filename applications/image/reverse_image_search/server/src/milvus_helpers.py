@@ -11,17 +11,31 @@ class MilvusHelper:
     def __init__(self):
         try:
             self.collection = None
+            self.collectionMap = dict()
+
             connections.connect(host=MILVUS_HOST, port=MILVUS_PORT)
             LOGGER.debug(f"Successfully connect to Milvus with IP:{MILVUS_HOST} and PORT:{MILVUS_PORT}")
         except Exception as e:
             LOGGER.error(f"Failed to connect Milvus: {e}")
             sys.exit(1)
 
+    # Deprecate: this is thread-unsafe
     def set_collection(self, collection_name):
         try:
             self.collection = Collection(name=collection_name)
         except Exception as e:
             LOGGER.error(f"Failed to set collection in Milvus: {e}")
+            sys.exit(1)
+
+    def get_collection(self, collection_name):
+        try:
+            collection = self.collectionMap.get(collection_name)
+            if collection is None:
+                collection = Collection(name=collection_name)
+                self.collectionMap[collection_name] = collection
+            return collection
+        except Exception as e:
+            LOGGER.error(f"Failed to get collection in Milvus: {e}")
             sys.exit(1)
 
     def has_collection(self, collection_name):
@@ -49,9 +63,9 @@ class MilvusHelper:
     def insert(self, collection_name, vectors):
         # Batch insert vectors to milvus collection
         try:
-            self.set_collection(collection_name)
+            # self.set_collection(collection_name)
             data = [vectors]
-            mr = self.collection.insert(data)
+            mr = self.get_collection(collection_name).insert(data)
             ids = mr.primary_keys
             LOGGER.debug(
                     f"Insert vectors to Milvus in collection: {collection_name} with {len(vectors)} rows")
@@ -60,12 +74,22 @@ class MilvusHelper:
             LOGGER.error(f"Failed to insert data to Milvus: {e}")
             sys.exit(1)
 
+    def delete(self, collection_name, vector_id):
+        # Single delete vector in milvus collection
+        try:
+            collection = self.get_collection(collection_name)
+            collection.delete(f"id == {vector_id}")
+            return "OK"
+        except Exception as e:
+            LOGGER.error(f"Failed to delete vector in Milvus: {e}")
+            sys.exit(1)
+
     def create_index(self, collection_name):
         # Create IVF_FLAT index on milvus collection
         try:
-            self.set_collection(collection_name)
+            collection = self.get_collection(collection_name)
             default_index = {"metric_type": METRIC_TYPE, "index_type": "IVF_FLAT", "params": {"nlist": 2048}}
-            status = self.collection.create_index(field_name="embedding", index_params=default_index)
+            status = collection.create_index(field_name="embedding", index_params=default_index)
             if not status.code:
                 LOGGER.debug(
                     f"Successfully create index in collection:{collection_name} with param:{default_index}")
@@ -79,8 +103,8 @@ class MilvusHelper:
     def delete_collection(self, collection_name):
         # Delete Milvus collection
         try:
-            self.set_collection(collection_name)
-            self.collection.drop()
+            collection = self.get_collection(collection_name)
+            collection.drop()
             LOGGER.debug("Successfully drop collection!")
             return "ok"
         except Exception as e:
@@ -90,10 +114,11 @@ class MilvusHelper:
     def search_vectors(self, collection_name, vectors, top_k):
         # Search vector in milvus collection
         try:
-            self.set_collection(collection_name)
-            self.collection.load()
+            # self.set_collection(collection_name)
+            collection = self.get_collection(collection_name)
+            collection.load()
             search_params = {"metric_type": METRIC_TYPE, "params": {"nprobe": 16}}
-            res = self.collection.search(vectors, anns_field="embedding", param=search_params, limit=top_k)
+            res = collection.search(vectors, anns_field="embedding", param=search_params, limit=top_k)
             LOGGER.debug(f"Successfully search in collection: {res}")
             return res
         except Exception as e:
@@ -103,9 +128,9 @@ class MilvusHelper:
     def count(self, collection_name):
         # Get the number of milvus collection
         try:
-            self.set_collection(collection_name)
-            self.collection.flush()
-            num = self.collection.num_entities
+            collection = self.get_collection(collection_name)
+            collection.flush()
+            num = collection.num_entities
             LOGGER.debug(f"Successfully get the num:{num} of the collection:{collection_name}")
             return num
         except Exception as e:

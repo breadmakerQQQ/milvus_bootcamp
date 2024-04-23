@@ -29,7 +29,7 @@ class MySQLHelper():
     def create_mysql_table(self, table_name):
         # Create mysql table if not exists
         self.test_connection()
-        sql = "create table if not exists " + table_name + "(milvus_id TEXT, image_path TEXT);"
+        sql = "create table if not exists " + table_name + "(milvus_id VARCHAR(64) PRIMARY KEY, image_path VARCHAR(256));"
         try:
             self.cursor.execute(sql)
             LOGGER.debug(f"MYSQL create table: {table_name} with sql: {sql}")
@@ -83,6 +83,18 @@ class MySQLHelper():
             self.cursor.execute(sql)
             self.conn.commit()
             LOGGER.debug(f"MYSQL delete all data in table:{table_name}")
+        except Exception as e:
+            LOGGER.error(f"MYSQL ERROR: {e} with sql: {sql}")
+            sys.exit(1)
+
+    def delete_single_record(self, table_name, vector_id):
+        # Delete single record in mysql table by vector id
+        self.test_connection()
+        sql = "delete from " + table_name + " where milvus_id = '" + vector_id + "';"
+        try:
+            self.cursor.execute(sql)
+            self.conn.commit()
+            LOGGER.debug(f"MYSQL delete single record:{vector_id} in table:{table_name}")
         except Exception as e:
             LOGGER.error(f"MYSQL ERROR: {e} with sql: {sql}")
             sys.exit(1)

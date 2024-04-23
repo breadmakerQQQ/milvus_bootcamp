@@ -15,7 +15,7 @@ def do_search(table_name: str, img_path: str, top_k: int, model: Resnet50, milvu
         vids = [str(x.id) for x in vectors[0]]
         paths = mysql_cli.search_by_milvus_ids(vids, table_name)
         distances = [x.distance for x in vectors[0]]
-        return paths, distances
+        return paths, distances, vids
     except Exception as e:
         LOGGER.error(f"Error with search : {e}")
         sys.exit(1)
