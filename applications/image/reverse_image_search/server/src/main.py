@@ -14,6 +14,7 @@ from config import TOP_K, UPLOAD_PATH
 from operations.load import do_load
 from operations.upload import do_upload
 from operations.search import do_search
+from operations.search import do_search_by_id
 from operations.count import do_count
 from operations.drop import do_drop
 from operations.delete import do_delete
@@ -114,6 +115,20 @@ async def search_images(image: UploadFile = File(...), topk: int = Form(TOP_K), 
         with open(img_path, "wb+") as f:
             f.write(content)
         paths, distances, vids = do_search(table_name, img_path, topk, MODEL, MILVUS_CLI, MYSQL_CLI)
+        res = list(zip(paths, distances, vids))
+        res = sorted(res, key=lambda item: item[1])
+        LOGGER.info("Successfully searched similar images!")
+        return res
+    except Exception as e:
+        LOGGER.error(e)
+        return {'status': False, 'msg': e}, 400
+
+
+@app.post('/img/search/id')
+async def search_images_by_id(src_table: str = None, des_table: str = None, vector_id: str = None, topk: int = 10):
+    # Search similarity for a stored image
+    try:
+        paths, distances, vids = do_search_by_id(src_table, des_table, topk, vector_id, MILVUS_CLI, MYSQL_CLI)
         res = list(zip(paths, distances, vids))
         res = sorted(res, key=lambda item: item[1])
         LOGGER.info("Successfully searched similar images!")

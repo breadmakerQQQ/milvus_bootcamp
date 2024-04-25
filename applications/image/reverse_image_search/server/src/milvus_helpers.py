@@ -84,6 +84,16 @@ class MilvusHelper:
             LOGGER.error(f"Failed to delete vector in Milvus: {e}")
             sys.exit(1)
 
+    def get(self, collection_name, vector_id):
+        # Query single record in milvus collection
+        try:
+            collection = self.get_collection(collection_name)
+            results = collection.query(expr=f"id == {vector_id}", output_fields=["id", "embedding"])
+            return results[0]["embedding"]
+        except Exception as e:
+            LOGGER.error(f"Failed to get vector in Milvus: {e}")
+            sys.exit(1)
+
     def create_index(self, collection_name):
         # Create IVF_FLAT index on milvus collection
         try:
